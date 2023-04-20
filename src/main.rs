@@ -14,10 +14,14 @@ fn main() {
 }
 fn handle_connection(mut stream: TcpStream) {
     let reader = BufReader::new(&mut stream);
+    println!("-------- NEW REQ --------");
     let req: Vec<_> = reader
         .lines()
-        .map(|result| result.unwrap())
+        .filter_map(|result| result.ok())
         .take_while(|line| !line.is_empty())
         .collect();
-    println!("Request {:#?}", req);
+    for line in req {
+        println!("{:?}", line);
+    }
+    println!("-------- END REQ --------");
 }
