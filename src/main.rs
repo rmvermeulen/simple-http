@@ -1,18 +1,20 @@
+use anyhow::Result;
 use std::{
     io::{prelude::*, BufReader},
     net::{TcpListener, TcpStream},
 };
 
-fn main() {
-    let listener = TcpListener::bind("localhost:8080").expect("Failed to bind address");
+fn main() -> Result<()> {
+    let listener = TcpListener::bind("localhost:8080")?;
     println!("Starting the server...");
     for stream in listener.incoming() {
-        let stream = stream.expect("Failed to get stream");
+        let stream = stream?;
 
-        handle_connection(stream);
+        handle_connection(stream)?;
     }
+    Ok(())
 }
-fn handle_connection(mut stream: TcpStream) {
+fn handle_connection(mut stream: TcpStream) -> Result<()> {
     let reader = BufReader::new(&mut stream);
     println!("-------- NEW REQ --------");
     let req: Vec<_> = reader
@@ -24,4 +26,8 @@ fn handle_connection(mut stream: TcpStream) {
         println!("{:?}", line);
     }
     println!("-------- END REQ --------");
+    let response = "HTTP/1.1 200 OK\r\n\r\n";
+
+    stream.write_all(response.as_bytes())?;
+    Ok(())
 }
