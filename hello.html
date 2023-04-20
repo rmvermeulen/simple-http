@@ -25,8 +25,6 @@
       const messages = document.getElementById("messages");
       const app = document.getElementById("app");
 
-      tryConnect();
-
       function print(...args) {
         console.log(...args);
         const pre = document.createElement("pre");
@@ -35,34 +33,32 @@
         messages.scrollTop = messages.scrollHeight;
       }
 
-      function tryConnect() {
-        print("tryConnect");
-        const ws = new WebSocket("ws://localhost:3012");
-        ws.onmessage = (m) => {
-          print(`server responded: "${m.data.replace(/\"/g, '\\"')}"`);
-        };
-        ws.onopen = () => {
-          print("ws connection open");
-          ws.send("hi from client!");
-          print("message sent!");
-        };
-        ws.onclose = () => {
-          setTimeout(() => {
-            window.location.reload();
-          }, 1000);
-        };
+      print("tryConnect");
+      const ws = new WebSocket("ws://localhost:3012");
+      ws.onmessage = (m) => {
+        print(`server responded: "${m.data.replace(/\"/g, '\\"')}"`);
+      };
+      ws.onopen = () => {
+        print("ws connection open");
+        ws.send("hi from client!");
+        print("message sent!");
+      };
+      ws.onclose = () => {
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      };
 
-        const label = document.createElement("label");
-        label.for = "edit";
-        label.innerText = "search for stuff";
-        const edit = document.createElement("input");
-        edit.id = "edit";
-        edit.type = "text";
-        edit.oninput = (e) => ws.send(e.target.value);
+      const label = document.createElement("label");
+      label.for = "edit";
+      label.innerText = "search for stuff";
+      const edit = document.createElement("input");
+      edit.id = "edit";
+      edit.type = "text";
+      edit.oninput = (e) => ws.send(e.target.value);
 
-        app.insertBefore(edit, messages);
-        app.insertBefore(label, edit);
-      }
+      app.insertBefore(edit, messages);
+      app.insertBefore(label, edit);
     </script>
   </body>
 </html>

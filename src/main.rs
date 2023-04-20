@@ -114,7 +114,7 @@ fn get_template(line: String, skip: usize) -> Option<Template> {
         })
         .flatten()
         .map(|(start, end)| Template {
-            name: line[(start + 1)..(end - 1)].to_string(),
+            name: line[(start + 1)..(end - 1)].trim().to_string(),
             range: (start, end),
         })
 }
