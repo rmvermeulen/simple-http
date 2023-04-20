@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Hello!</title>
+  </head>
+  <body>
+    <h1>Hello!</h1>
+    <p>Hi from Rust</p>
+    <button onclick="tryConnect()">Connect WebSocket</button>
+    <script>
+      function tryConnect() {
+        console.log("tryConnect");
+        const ws = new WebSocket("ws://localhost:3012");
+        ws.onmessage = (m) => {
+          console.log("server said:", m.data);
+          setTimeout(() => ws.send("thanks for the message"), 1000);
+        };
+        ws.onopen = (e) => {
+          console.log("on open: ", e);
+          ws.send("hi from client!");
+          console.log("message sent!");
+        };
+        ws.onclose = () => {
+          window.location.reload();
+        };
+      }
+    </script>
+  </body>
+</html>

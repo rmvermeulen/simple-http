@@ -1,8 +1,10 @@
 use anyhow::Result;
 use std::{
+    fs,
     io::{prelude::*, BufReader},
     net::{TcpListener, TcpStream},
 };
+use ws::{listen, Message};
 
 fn main() -> Result<()> {
     let listener = TcpListener::bind("localhost:8080")?;
@@ -26,8 +28,24 @@ fn handle_connection(mut stream: TcpStream) -> Result<()> {
         println!("{:?}", line);
     }
     println!("-------- END REQ --------");
-    let response = "HTTP/1.1 200 OK\r\n\r\n";
+
+    let status = "HTTP/1.1 200 OK";
+    let contents = fs::read_to_string("hello.html")?;
+    let length = contents.len();
+
+    let response = format!("{status}\r\nContent-Length: {length}\r\n\r\n{contents}");
 
     stream.write_all(response.as_bytes())?;
+    println!("Response sent!");
+
+    println!("Starting the ws server...");
+    listen("127.0.0.1:3012", |out| {
+        move |msg: Message| {
+            let text = msg.into_text().unwrap();
+            out.send(Message::text(format!("SERVER:{text}")))
+        }
+    })?;
+    println!("Started the ws server!");
+
     Ok(())
 }
