@@ -2,28 +2,66 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Hello!</title>
+    <title>{title}</title>
+    <style>
+      ol {
+        overflow-y: auto;
+        min-height: 200px;
+        max-height: 250px;
+        width: 50%;
+        background-color: black;
+        color: white;
+      }
+    </style>
   </head>
   <body>
-    <h1>Hello!</h1>
+    <h1>{title}</h1>
+    <h2>Current serving from "{cwd}"</h2>
     <p>Hi from Rust</p>
-    <button onclick="tryConnect()">Connect WebSocket</button>
+    <div id="app">
+      <ol id="messages"></ol>
+    </div>
     <script>
+      const messages = document.getElementById("messages");
+      const app = document.getElementById("app");
+
+      tryConnect();
+
+      function print(...args) {
+        console.log(...args);
+        const pre = document.createElement("pre");
+        pre.textContent = args.join("");
+        messages.appendChild(pre);
+        messages.scrollTop = messages.scrollHeight;
+      }
+
       function tryConnect() {
-        console.log("tryConnect");
+        print("tryConnect");
         const ws = new WebSocket("ws://localhost:3012");
         ws.onmessage = (m) => {
-          console.log("server said:", m.data);
-          setTimeout(() => ws.send("thanks for the message"), 1000);
+          print(`server responded: "${m.data.replace(/\"/g, '\\"')}"`);
         };
-        ws.onopen = (e) => {
-          console.log("on open: ", e);
+        ws.onopen = () => {
+          print("ws connection open");
           ws.send("hi from client!");
-          console.log("message sent!");
+          print("message sent!");
         };
         ws.onclose = () => {
-          window.location.reload();
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
         };
+
+        const label = document.createElement("label");
+        label.for = "edit";
+        label.innerText = "search for stuff";
+        const edit = document.createElement("input");
+        edit.id = "edit";
+        edit.type = "text";
+        edit.oninput = (e) => ws.send(e.target.value);
+
+        app.insertBefore(edit, messages);
+        app.insertBefore(label, edit);
       }
     </script>
   </body>
