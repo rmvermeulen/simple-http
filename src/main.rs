@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     env, fs,
@@ -7,6 +8,44 @@ use std::{
     thread,
 };
 use ws::{listen, Message};
+
+#[derive(Serialize)]
+enum HTMLElement {
+    Div,
+    P,
+    Pre,
+    Ul,
+    Ol,
+    Li,
+    A,
+}
+
+type Attributes = HashMap<String, String>;
+
+#[derive(Deserialize)]
+enum Response {
+    CreatedOk { id: String },
+    CreatedError { message: String },
+}
+
+#[derive(Serialize)]
+enum Command {
+    CreateElement {
+        el: HTMLElement,
+        parent: Option<String>,
+        attrs: Option<Attributes>,
+    },
+    RemoveElement {
+        id: String,
+    },
+}
+impl Command {
+    pub fn to_message(&self) -> Result<Message> {
+        let json = serde_json::to_string(self)?;
+        let msg_text = format!("json{json}");
+        Ok(Message::Text(msg_text))
+    }
+}
 
 fn main() -> Result<()> {
     let cwd: String = env::current_dir()?
@@ -17,6 +56,26 @@ fn main() -> Result<()> {
     thread::spawn(|| {
         println!("ws: starting server...");
         listen("127.0.0.1:3012", |out| {
+            // create a custom element
+            let create_some_el = Command::CreateElement {
+                el: HTMLElement::Pre,
+                parent: None,
+                attrs: Some(
+                    vec![
+                        ("x-data".to_string(), "my value".to_string()),
+                        (
+                            "innerText".to_string(),
+                            "this is the innerText!".to_string(),
+                        ),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect::<Attributes>(),
+                ),
+            };
+            let msg = create_some_el.to_message().unwrap();
+            out.send(msg).unwrap();
+
             move |msg: Message| {
                 let text = msg.into_text().unwrap();
                 out.send(Message::text(format!("I received: \"{text}\"")))

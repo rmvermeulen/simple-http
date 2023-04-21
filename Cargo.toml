@@ -8,4 +8,6 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.70"
 http = "0.2.9"
+serde = { verison = "1.0.160", features = ["derive"] }
+serde_json = "1.0.96"
 ws = "0.9.2"
