@@ -25,6 +25,22 @@
       const messages = document.getElementById('messages');
       const app = document.getElementById('app');
 
+      const responseCreatedOk = (id) => {
+        ws.send(
+          JSON.stringify({
+            CreatedOk: { id },
+          })
+        );
+      };
+
+      const responseRemovedOk = () => {
+        ws.send(
+          JSON.stringify({
+            RemovedOk: null,
+          })
+        );
+      };
+
       function handleCommand(cmd) {
         const [key] = Object.keys(cmd);
         switch (key) {
@@ -33,6 +49,7 @@
             console.log('create-element', args);
 
             const el = document.createElement(args.el);
+            el.id = Math.floor(Math.random() * 10e4);
             if (args.attrs) {
               Object.entries(args.attrs).forEach(([attr, value]) => {
                 if (el.hasAttribute(attr)) {
@@ -46,6 +63,7 @@
               created: el,
               parent,
             });
+            responseCreatedOk(el.id);
             return true;
           }
           case 'RemoveElement': {
@@ -53,8 +71,11 @@
             const args = cmd[key];
             const toRemove = document.getElementById(args.id);
             if (toRemove) {
+              console.log('removing', toRemove);
               toRemove.parentNode.removeChild(toRemove);
+              responseRemovedOk();
             }
+
             return true;
           }
         }

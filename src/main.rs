@@ -9,7 +9,7 @@ use std::{
 };
 use ws::{listen, Message};
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 enum HTMLElement {
     Div,
     P,
@@ -22,13 +22,15 @@ enum HTMLElement {
 
 type Attributes = HashMap<String, String>;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 enum Response {
     CreatedOk { id: String },
     CreatedError { message: String },
+    RemovedOk,
+    RemovedError { message: String },
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 enum Command {
     CreateElement {
         el: HTMLElement,
@@ -39,11 +41,11 @@ enum Command {
         id: String,
     },
 }
-impl Command {
-    pub fn to_message(&self) -> Result<Message> {
-        let json = serde_json::to_string(self)?;
+impl Into<Message> for Command {
+    fn into(self) -> Message {
+        let json = serde_json::to_string(&self).unwrap();
         let msg_text = format!("json{json}");
-        Ok(Message::Text(msg_text))
+        Message::Text(msg_text)
     }
 }
 
@@ -73,12 +75,32 @@ fn main() -> Result<()> {
                     .collect::<Attributes>(),
                 ),
             };
-            let msg = create_some_el.to_message().unwrap();
-            out.send(msg).unwrap();
+
+            out.send(create_some_el).unwrap();
 
             move |msg: Message| {
-                let text = msg.into_text().unwrap();
-                out.send(Message::text(format!("I received: \"{text}\"")))
+                let text = msg.into_text()?;
+
+                let res = serde_json::de::from_str::<Response>(text.as_str());
+
+                if let Ok(res) = res {
+                    out.send(format!("received response OK! {:?}", res))
+                        .unwrap();
+                    match res {
+                        Response::CreatedOk { id } => {
+                            let remove_created_element = Command::RemoveElement { id };
+                            out.send(remove_created_element).unwrap();
+                        }
+                        Response::RemovedOk => {
+                            println!("removed node!!!");
+                        }
+                        _ => println!("ignoring error for now"),
+                    };
+                } else {
+                    let msg = Message::text(format!("I received: \"{text}\""));
+                    out.send(msg)?;
+                }
+                Ok(())
             }
         })
         .expect("ws: Failed to start server");
