@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use http::{HeaderName, Request, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -6,6 +7,8 @@ use std::{
     fs::{self, File},
     io::{prelude::*, BufReader},
     net::{TcpListener, TcpStream},
+    path::PathBuf,
+    rc::Rc,
     thread,
 };
 use typescript_type_def::{write_definition_file, DefinitionFileOptions, TypeDef};
@@ -127,37 +130,83 @@ fn main() -> Result<()> {
 fn handle_connection(cwd: &str, mut stream: TcpStream) -> Result<()> {
     let reader = BufReader::new(&mut stream);
     println!("-------- NEW REQ --------");
-    let req: Vec<_> = reader
+    let lines: Vec<_> = reader
         .lines()
         .filter_map(|result| result.ok())
         .take_while(|line| !line.is_empty())
         .collect();
-    for line in req {
-        println!("{:?}", line);
+
+    assert!(lines.len() < 64);
+    let mut headers = [httparse::EMPTY_HEADER; 64];
+    let mut req = httparse::Request::new(&mut headers);
+
+    let buf = lines.join("\r\n");
+    let bytes = buf.into_bytes();
+    let status = req.parse(&bytes).expect("no error?");
+
+    if let (Some(method), Some(path)) = (req.method, req.path) {
+        let path = if path == "/" {
+            PathBuf::from("www/index.html")
+        } else {
+            let path: PathBuf = PathBuf::from(path).strip_prefix("/")?.into();
+            PathBuf::from("www").join(path)
+        };
+
+        if method != "GET" {
+            return Err(anyhow!("invalid http method"));
+        }
+
+        let ext = path.extension().ok_or(anyhow!("invalid file extension"))?;
+        let (status, body) = if ext == "html" {
+            let context = [
+                ("title".to_string(), "Awesome rust server app!".to_string()),
+                ("cwd".to_string(), cwd.to_string()),
+            ]
+            .into_iter()
+            .collect::<HashMap<String, String>>();
+
+            println!("path: {path:?}");
+            // let client_src = fs::read_to_string("www/index.js")?;
+            let template = fs::read_to_string(path)?;
+            let merged = insert_values(template, &context);
+            // .replace(
+            //     "<script></script>",
+            //     format!("<script>{}</script>", client_src).as_str(),
+            // );
+            (StatusCode::OK, Some(merged))
+        } else if ext == "js" {
+            println!("reading js: {path:?}");
+            fs::read_to_string(path)
+                .map(|file| (StatusCode::OK, Some(file)))
+                .unwrap_or((StatusCode::NOT_FOUND, None))
+        } else {
+            (StatusCode::NOT_FOUND, None)
+        };
+
+        // println!("body: {body}");
+        // let res = http::Response::builder()
+        //     .status(status)
+        //     .header("Content-Length", body.len())
+        //     .body(body)?;
+        // let body = res.body();
+        // println!("body: {body}");
+        let line = format!("HTTP/1.1 {status}\r\n");
+        println!("{line}");
+        stream.write(line.as_bytes())?;
+        if body.is_some() {
+            let body = body.unwrap();
+            let line = format!("Content-Length: {length}\r\n", length = body.len());
+            println!("{line}");
+            stream.write(line.as_bytes())?;
+
+            stream.write("\r\n".as_bytes())?;
+            stream.write(body.as_bytes())?;
+        }
+        println!("Response sent!");
+    } else {
+        return Err(anyhow!("Invalid request"));
     }
     println!("-------- END REQ --------");
-
-    let status = "HTTP/1.1 200 OK";
-
-    let context = [
-        ("title".to_string(), "Awesome rust server app!".to_string()),
-        ("cwd".to_string(), cwd.to_string()),
-    ]
-    .into_iter()
-    .collect::<HashMap<String, String>>();
-
-    let client_src = fs::read_to_string("www/index.js")?;
-    let template = fs::read_to_string("www/index.html")?;
-    let contents = insert_values(template, &context).replace(
-        "<script></script>",
-        format!("<script>{}</script>", client_src).as_str(),
-    );
-    let length = contents.len();
-
-    let response = format!("{status}\r\nContent-Length: {length}\r\n\r\n{contents}");
-
-    stream.write_all(response.as_bytes())?;
-    println!("Response sent!");
 
     Ok(())
 }
