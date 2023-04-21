@@ -2,14 +2,16 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    env, fs,
+    env,
+    fs::{self, File},
     io::{prelude::*, BufReader},
     net::{TcpListener, TcpStream},
     thread,
 };
+use typescript_type_def::{write_definition_file, DefinitionFileOptions, TypeDef};
 use ws::{listen, Message};
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, TypeDef)]
 enum HTMLElement {
     Div,
     P,
@@ -22,7 +24,7 @@ enum HTMLElement {
 
 type Attributes = HashMap<String, String>;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, TypeDef)]
 enum Response {
     CreatedOk { id: String },
     CreatedError { message: String },
@@ -30,7 +32,7 @@ enum Response {
     RemovedError { message: String },
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, TypeDef)]
 enum Command {
     CreateElement {
         el: HTMLElement,
@@ -49,7 +51,13 @@ impl Into<Message> for Command {
     }
 }
 
+type Interop = (Command, Response);
+
 fn main() -> Result<()> {
+    let mut def_file = File::create("client/interop.ts")?;
+    let options = DefinitionFileOptions::default();
+    write_definition_file::<_, Interop>(&mut def_file, options)?;
+
     let cwd: String = env::current_dir()?
         .to_str()
         .ok_or(anyhow!("current_dir"))?
@@ -138,8 +146,12 @@ fn handle_connection(cwd: &str, mut stream: TcpStream) -> Result<()> {
     .into_iter()
     .collect::<HashMap<String, String>>();
 
-    let template = fs::read_to_string("hello.html")?;
-    let contents = insert_values(template, &context);
+    let client_src = fs::read_to_string("www/index.js")?;
+    let template = fs::read_to_string("www/index.html")?;
+    let contents = insert_values(template, &context).replace(
+        "<script></script>",
+        format!("<script>{}</script>", client_src).as_str(),
+    );
     let length = contents.len();
 
     let response = format!("{status}\r\nContent-Length: {length}\r\n\r\n{contents}");
