@@ -141,23 +141,35 @@ fn handle_connection(cwd: &str, mut stream: TcpStream) -> Result<()> {
     let mut req = httparse::Request::new(&mut headers);
 
     let buf = lines.join("\r\n");
+    // println!("{buf}");
     let bytes = buf.into_bytes();
     let status = req.parse(&bytes).expect("no error?");
 
-    if let (Some(method), Some(path)) = (req.method, req.path) {
+    let req = req;
+    let mut dest = None;
+    for header in req.headers {
+        if header.name == "Sec-Fetch-Dest" {
+            dest = Some(String::from_utf8(header.value.to_vec())?);
+        }
+    }
+
+    if let (Some(method), Some(path), Some(dest)) = (req.method, req.path, dest) {
+        println!("method={method} path={path} dest={dest}");
+
         let path = if path == "/" {
             PathBuf::from("www/index.html")
         } else {
             let path: PathBuf = PathBuf::from(path).strip_prefix("/")?.into();
             PathBuf::from("www").join(path)
         };
+        println!("{method} {path:?}");
 
         if method != "GET" {
             return Err(anyhow!("invalid http method"));
         }
 
         let ext = path.extension().ok_or(anyhow!("invalid file extension"))?;
-        let (status, body) = if ext == "html" {
+        let (status, content_type, body) = if ext == "html" {
             let context = [
                 ("title".to_string(), "Awesome rust server app!".to_string()),
                 ("cwd".to_string(), cwd.to_string()),
@@ -173,14 +185,23 @@ fn handle_connection(cwd: &str, mut stream: TcpStream) -> Result<()> {
             //     "<script></script>",
             //     format!("<script>{}</script>", client_src).as_str(),
             // );
-            (StatusCode::OK, Some(merged))
+            (
+                StatusCode::OK,
+                Some("text/html; charset=utf-8"),
+                Some(merged),
+            )
         } else if ext == "js" {
-            println!("reading js: {path:?}");
             fs::read_to_string(path)
-                .map(|file| (StatusCode::OK, Some(file)))
-                .unwrap_or((StatusCode::NOT_FOUND, None))
+                .map(|file| {
+                    (
+                        StatusCode::OK,
+                        Some("text/javascript; charset=utf-8"),
+                        Some(file),
+                    )
+                })
+                .unwrap_or((StatusCode::NOT_FOUND, None, None))
         } else {
-            (StatusCode::NOT_FOUND, None)
+            (StatusCode::NOT_FOUND, None, None)
         };
 
         // println!("body: {body}");
@@ -193,6 +214,13 @@ fn handle_connection(cwd: &str, mut stream: TcpStream) -> Result<()> {
         let line = format!("HTTP/1.1 {status}\r\n");
         println!("{line}");
         stream.write(line.as_bytes())?;
+
+        if content_type.is_some() {
+            let content_type = content_type.unwrap();
+            let line = format!("Content-Type: {content_type}\r\n",);
+            println!("{line}");
+            stream.write(line.as_bytes())?;
+        }
         if body.is_some() {
             let body = body.unwrap();
             let line = format!("Content-Length: {length}\r\n", length = body.len());

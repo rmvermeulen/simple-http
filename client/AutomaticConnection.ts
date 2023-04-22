@@ -1,1 +1,3 @@
-export class AutomaticConnection {}
+export class AutomaticConnection {
+  constructor(private readonly address: string) {}
+}
